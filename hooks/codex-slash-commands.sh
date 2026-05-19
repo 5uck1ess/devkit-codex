@@ -101,6 +101,23 @@ if [[ -n "$RAW_NAME" ]]; then
   exit 0
 fi
 
+case "$FIRST_LINE" in
+  devkit\ workflow\ *:*)
+    RAW_NAME=${FIRST_LINE#devkit workflow }
+    NAME=${RAW_NAME%%:*}
+    ARGS=${RAW_NAME#*:}
+    ARGS=$(trim_left "$ARGS")
+    dispatch_target "$NAME" "$ARGS" && exit 0
+    ;;
+  devkit\ *:*)
+    RAW_NAME=${FIRST_LINE#devkit }
+    NAME=${RAW_NAME%%:*}
+    ARGS=${RAW_NAME#*:}
+    ARGS=$(trim_left "$ARGS")
+    dispatch_target "$NAME" "$ARGS" && exit 0
+    ;;
+esac
+
 PROMPT_LC=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')
 case "$PROMPT_LC" in
   *"build a feature"* | *"new feature"* | *"add a feature"* | *"implement "*) dispatch_target "feature" "$PROMPT" && exit 0 ;;
