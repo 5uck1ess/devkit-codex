@@ -24,11 +24,20 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --devkit) devkit_root="$2"; shift 2 ;;
-    --config) config_path="$2"; shift 2 ;;
-    --hooks) hooks_path="$2"; shift 2 ;;
+    --devkit)
+      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
+      devkit_root="$2"; shift 2
+      ;;
+    --config)
+      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
+      config_path="$2"; shift 2
+      ;;
+    --hooks)
+      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
+      hooks_path="$2"; shift 2
+      ;;
     --check) check=1; shift ;;
-    --health|health) health=1; shift ;;
+    --health) health=1; shift ;;
     --uninstall) uninstall=1; shift ;;
     --force) force=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -73,7 +82,6 @@ remove_devkit_config() {
   local source="$1"
   local dest="$2"
   awk '
-    BEGIN { in_devkit=0 }
     /^\[/ {
       in_devkit=($0 == "[mcp_servers.devkit]")
       if (in_devkit) next
@@ -81,6 +89,21 @@ remove_devkit_config() {
     in_devkit { next }
     { print }
   ' "$source" > "$dest"
+}
+
+backup_once() {
+  local path="$1"
+  [[ -e "$path" ]] || return 0
+  [[ -e "$path.bak" ]] && return 0
+  cp "$path" "$path.bak"
+}
+
+atomic_write() {
+  local path="$1"
+  local tmp
+  tmp="$(mktemp "$(dirname "$path")/.${path##*/}.XXXXXX")"
+  cat > "$tmp"
+  mv -f "$tmp" "$path"
 }
 
 health_check() {
@@ -239,15 +262,15 @@ if [[ "$uninstall" -eq 1 ]]; then
     tmp="$(mktemp)"
     remove_devkit_config "$config_path" "$tmp"
     if ! cmp -s "$config_path" "$tmp"; then
-      cp "$config_path" "$config_path.bak"
-      cat "$tmp" > "$config_path"
+      backup_once "$config_path"
+      atomic_write "$config_path" < "$tmp"
       changed=1
     fi
     rm -f "$tmp"
   fi
 
   if is_devkit_hooks_file; then
-    cp "$hooks_path" "$hooks_path.bak"
+    backup_once "$hooks_path"
     rm -f "$hooks_path"
     changed=1
   elif [[ -f "$hooks_path" ]]; then
@@ -262,6 +285,11 @@ if [[ "$uninstall" -eq 1 ]]; then
   exit 0
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+  printf 'jq is required to install devkit-codex\n' >&2
+  exit 1
+fi
+
 mkdir -p "$(dirname "$config_path")" "$(dirname "$hooks_path")"
 
 if [[ -f "$hooks_path" ]] && ! is_devkit_hooks_file; then
@@ -269,7 +297,7 @@ if [[ -f "$hooks_path" ]] && ! is_devkit_hooks_file; then
     printf 'existing hooks file is not devkit-owned: %s; rerun with --force\n' "$hooks_path" >&2
     exit 1
   fi
-  cp "$hooks_path" "$hooks_path.bak"
+  backup_once "$hooks_path"
 fi
 
 if [[ -f "$config_path" ]]; then
@@ -296,14 +324,14 @@ else
   printf '[features]\nhooks = true\n' > "$tmp"
 fi
 {
-  sed '/^[[:space:]]*$/{$!N;/^\n$/D;}' "$tmp"
+  awk 'NF { blank=0; print; next } !blank { print; blank=1 }' "$tmp"
   printf '\n[mcp_servers.devkit]\n'
   printf 'command = %s\n' "$(toml_quote "$devkit_root/bin/devkit")"
   printf 'args = ["mcp"]\n'
-} > "$config_path"
+} | atomic_write "$config_path"
 rm -f "$tmp"
 
-render_hooks > "$hooks_path"
+render_hooks | atomic_write "$hooks_path"
 chmod 600 "$config_path" "$hooks_path"
 
 printf 'Installed devkit-codex.\nDevkit: %s\nConfig: %s\nHooks:  %s\n' "$devkit_root" "$config_path" "$hooks_path"

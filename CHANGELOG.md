@@ -16,3 +16,12 @@ Initial public release of the Codex adapter for devkit.
 - Self-contained smoke tests for hook JSON, slash bridge, agent mapping,
   installer health, reinstall idempotency, and uninstall behavior.
 - GitHub Actions CI and release workflows for public releases.
+- MIT license and manifest metadata for public distribution.
+
+### Fixed
+
+- Install now prechecks `jq` before mutating Codex config.
+- Install and uninstall now write Codex config/hooks atomically.
+- Backups preserve the first pre-adapter state instead of clobbering `.bak`
+  on repeated installs.
+- CI now runs on both Ubuntu and macOS.

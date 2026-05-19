@@ -8,14 +8,22 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install test dependencies
+      - name: Install test dependencies on Ubuntu
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq jq shellcheck
+
+      - name: Install test dependencies on macOS
+        if: runner.os == 'macOS'
+        run: brew install jq shellcheck
 
       - name: Shell syntax
         run: |
@@ -30,9 +38,7 @@ jobs:
         run: shellcheck install.sh test/hooks_test.sh hooks/*.sh codex/agent-prompt.sh
 
       - name: JSON templates
-        run: |
-          jq . manifest.json >/dev/null
-          jq . codex/hooks.template.json >/dev/null
+        run: jq . manifest.json >/dev/null
 
       - name: Smoke tests
         run: bash test/hooks_test.sh

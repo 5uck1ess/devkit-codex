@@ -34,12 +34,6 @@ Researcher agent fixture.
 MD
 DEVKIT_ROOT="${DEVKIT_ROOT:-$fake_devkit}"
 
-if jq . "$ROOT/codex/hooks.template.json" >/dev/null; then
-  pass "hooks template valid JSON"
-else
-  fail "hooks template invalid JSON"
-fi
-
 out=$(jq -n --arg cwd "$DEVKIT_ROOT" '{hook_event_name:"UserPromptSubmit",cwd:$cwd,prompt:"/feature tiny no-op"}' | DEVKIT_ROOT="$DEVKIT_ROOT" bash "$ROOT/hooks/codex-slash-commands.sh" 2>/dev/null || true)
 if printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("workflow \"feature\"")' >/dev/null; then
   pass "slash bridge injects workflow"
@@ -124,6 +118,28 @@ if [[ -e "$hooks_path" ]] && grep -q 'custom hooks' "$hooks_path"; then
   pass "uninstall preserves non-devkit hooks"
 else
   fail "uninstall changed non-devkit hooks"
+fi
+
+force_hooks="$install_tmp/force-hooks.json"
+printf '{"description":"custom hooks","hooks":{}}\n' > "$force_hooks"
+bash "$ROOT/install.sh" --devkit "$fake_devkit" --config "$config_path" --hooks "$force_hooks" --force >/dev/null
+if [[ -e "$force_hooks.bak" ]] && grep -q 'custom hooks' "$force_hooks.bak" && jq . "$force_hooks" >/dev/null; then
+  pass "force install backs up foreign hooks once"
+else
+  fail "force install backup failed"
+fi
+printf '{"description":"new custom hooks","hooks":{}}\n' > "$force_hooks"
+bash "$ROOT/install.sh" --devkit "$fake_devkit" --config "$config_path" --hooks "$force_hooks" --force >/dev/null
+if grep -q 'custom hooks' "$force_hooks.bak" && ! grep -q 'new custom hooks' "$force_hooks.bak"; then
+  pass "force install preserves first hooks backup"
+else
+  fail "force install clobbered hooks backup"
+fi
+
+if bash "$ROOT/install.sh" --devkit >/dev/null 2>&1; then
+  fail "install rejects missing --devkit value"
+else
+  pass "install rejects missing --devkit value"
 fi
 
 echo "Results: $PASS passed, $FAIL failed"

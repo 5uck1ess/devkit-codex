@@ -67,6 +67,10 @@ bash -n test/hooks_test.sh
 The smoke test uses temporary fake devkit fixtures, so it does not require a
 local devkit checkout.
 
+## License
+
+MIT. See [LICENSE](LICENSE).
+
 ## Release
 
 Releases follow the same shape as the core devkit pipeline:
