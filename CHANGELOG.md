@@ -25,3 +25,9 @@ Initial public release of the Codex adapter for devkit.
 - Backups preserve the first pre-adapter state instead of clobbering `.bak`
   on repeated installs.
 - CI now runs on both Ubuntu and macOS.
+- Slash command bridge now no-ops clearly when `DEVKIT_ROOT` is missing instead
+  of silently searching the current working directory.
+- Agent mapping now recognizes multiline `tools:` frontmatter.
+- Smoke tests now cover skill dispatch, natural-language dispatch, apply-patch
+  rewriting, Stop block rewriting, permission-deny behavior, and multiline
+  agent tools.

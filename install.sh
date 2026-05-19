@@ -98,12 +98,9 @@ backup_once() {
   cp "$path" "$path.bak"
 }
 
-atomic_write() {
+temp_for_path() {
   local path="$1"
-  local tmp
-  tmp="$(mktemp "$(dirname "$path")/.${path##*/}.XXXXXX")"
-  cat > "$tmp"
-  mv -f "$tmp" "$path"
+  mktemp "$(dirname "$path")/.${path##*/}.XXXXXX"
 }
 
 health_check() {
@@ -259,14 +256,15 @@ fi
 if [[ "$uninstall" -eq 1 ]]; then
   changed=0
   if [[ -f "$config_path" ]]; then
-    tmp="$(mktemp)"
+    tmp="$(temp_for_path "$config_path")"
     remove_devkit_config "$config_path" "$tmp"
     if ! cmp -s "$config_path" "$tmp"; then
       backup_once "$config_path"
-      atomic_write "$config_path" < "$tmp"
+      mv -f "$tmp" "$config_path"
       changed=1
+    else
+      rm -f "$tmp"
     fi
-    rm -f "$tmp"
   fi
 
   if is_devkit_hooks_file; then
@@ -323,15 +321,25 @@ else
   tmp="$(mktemp)"
   printf '[features]\nhooks = true\n' > "$tmp"
 fi
-{
+config_tmp="$(temp_for_path "$config_path")"
+if ! {
   awk 'NF { blank=0; print; next } !blank { print; blank=1 }' "$tmp"
   printf '\n[mcp_servers.devkit]\n'
   printf 'command = %s\n' "$(toml_quote "$devkit_root/bin/devkit")"
   printf 'args = ["mcp"]\n'
-} | atomic_write "$config_path"
+} > "$config_tmp"; then
+  rm -f "$tmp" "$config_tmp"
+  exit 1
+fi
+mv -f "$config_tmp" "$config_path"
 rm -f "$tmp"
 
-render_hooks | atomic_write "$hooks_path"
+hooks_tmp="$(temp_for_path "$hooks_path")"
+if ! render_hooks > "$hooks_tmp"; then
+  rm -f "$hooks_tmp"
+  exit 1
+fi
+mv -f "$hooks_tmp" "$hooks_path"
 chmod 600 "$config_path" "$hooks_path"
 
 printf 'Installed devkit-codex.\nDevkit: %s\nConfig: %s\nHooks:  %s\n' "$devkit_root" "$config_path" "$hooks_path"

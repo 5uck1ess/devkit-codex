@@ -8,8 +8,11 @@ PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // .user_prompt // .input // empt
 [[ -z "$PROMPT" ]] && exit 0
 
 FIRST_LINE=$(printf '%s' "$PROMPT" | sed -n '1p')
-DEVKIT_ROOT="${DEVKIT_ROOT:-$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)}"
-[[ -n "$DEVKIT_ROOT" ]] || DEVKIT_ROOT="$(pwd)"
+DEVKIT_ROOT="${DEVKIT_ROOT:-}"
+if [[ -z "$DEVKIT_ROOT" ]]; then
+  printf 'codex-slash-commands: DEVKIT_ROOT is unset; run devkit-codex install.sh\n' >&2
+  exit 0
+fi
 
 emit_context() {
   local context="$1"

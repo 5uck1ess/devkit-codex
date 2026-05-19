@@ -41,8 +41,20 @@ if [[ ! -f "$AGENT_FILE" ]]; then
   exit 2
 fi
 
-tools_line=$(grep -m1 '^tools:' "$AGENT_FILE" 2>/dev/null || true)
-if printf '%s' "$tools_line" | grep -qE '\b(Edit|Write)\b'; then
+tools_block=$(awk '
+  /^tools:/ {
+    in_tools=1
+    print
+    next
+  }
+  in_tools && /^[^[:space:]-]/ {
+    exit
+  }
+  in_tools {
+    print
+  }
+' "$AGENT_FILE" 2>/dev/null || true)
+if printf '%s' "$tools_block" | grep -qE '\b(Edit|Write)\b'; then
   codex_type="worker"
   ownership="Assign a bounded write scope before spawning. The worker must not edit outside that ownership without asking."
 else
