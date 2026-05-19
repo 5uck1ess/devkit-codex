@@ -29,7 +29,8 @@ jobs:
             echo "FATAL: manifest.json version must be semver x.y.z, got '$VERSION'"
             exit 1
           fi
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG=${LATEST_TAG#v}
           echo "manifest=$VERSION latest_tag=$LATEST_TAG"
 
           if [ "$VERSION" != "$LATEST_TAG" ]; then
