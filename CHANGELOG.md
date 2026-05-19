@@ -41,3 +41,5 @@ Initial public release of the Codex adapter for devkit.
   Previously `git describe ... | sed ... || echo 0.0.0` ignored `git describe`'s
   failure because the `||` saw `sed`'s success on empty input, leaving
   `LATEST_TAG` empty and producing `version=..1` on the first release.
+- Release `publish` job now checks out the repo so `gh release edit` can
+  resolve the target repository from git context.
