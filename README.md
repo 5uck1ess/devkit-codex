@@ -87,6 +87,11 @@ review again:
 /hooks
 ```
 
+Codex trusts hook command entries. Updating files that an already-trusted hook
+command calls should not require another review, but changing generated command
+strings, hook order, hook location, or switching from relative to absolute paths
+will invalidate the previous trust review.
+
 ## Commands
 
 ```sh
