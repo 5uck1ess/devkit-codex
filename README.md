@@ -23,6 +23,44 @@ By default this writes:
 - `~/.codex/config.toml`
 - `~/.codex/hooks.json`
 
+After installing, start a new Codex session and run:
+
+```text
+/hooks
+```
+
+Codex requires first-run review for new non-managed command hooks before they
+can run. Review the devkit-codex hook commands, confirm that the paths point to
+your local `devkit` and `devkit-codex` checkouts, then trust them.
+
+For less fragile hook commands, install with an absolute devkit path:
+
+```sh
+./install.sh --devkit "$(cd ../devkit && pwd)"
+```
+
+Start Codex from a git repository when testing workflows. The core devkit MCP
+server expects to start inside a project repo; a plain directory will make MCP
+startup fail before `devkit_start` and `devkit_advance` are exposed.
+
+Codex CLI handles `/` commands itself, so unknown slash commands such as
+`/feature` may be rejected before hooks can inspect them. To run a devkit
+workflow in Codex, use the text trigger form:
+
+```text
+devkit feature: add a tiny no-op test file
+```
+
+```text
+devkit workflow tri-security: audit this repository
+```
+
+Natural-language prompts can also dispatch common workflows:
+
+```text
+please run a security audit
+```
+
 Use `--config` and `--hooks` to target alternate files, which is useful for
 testing:
 
@@ -51,8 +89,9 @@ non-devkit hooks files untouched.
 - Registers the core devkit MCP server with Codex as `mcp_servers.devkit`.
 - Enables Codex hooks in `config.toml`.
 - Generates a devkit-owned `hooks.json` with Codex lifecycle hooks.
-- Bridges `/feature`, `/bugfix`, `/tri-review`, `/health`, and other devkit
-  workflow prompts into MCP-driven workflow instructions.
+- Bridges devkit workflow prompts such as feature requests, bugfixes,
+  tri-review, health checks, and security audits into MCP-driven workflow
+  instructions.
 - Maps devkit agent definitions to Codex `explorer` or `worker` subagent
   guidance.
 

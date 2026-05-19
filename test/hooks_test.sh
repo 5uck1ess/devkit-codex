@@ -92,6 +92,13 @@ else
   fail "slash bridge natural-language trigger failed"
 fi
 
+explicit_out=$(jq -n --arg cwd "$DEVKIT_ROOT" '{hook_event_name:"UserPromptSubmit",cwd:$cwd,prompt:"devkit feature: tiny no-op"}' | DEVKIT_ROOT="$DEVKIT_ROOT" bash "$ROOT/hooks/codex-slash-commands.sh" 2>/dev/null || true)
+if printf '%s' "$explicit_out" | jq -e '.hookSpecificOutput.additionalContext | contains("workflow \"feature\"")' >/dev/null; then
+  pass "slash bridge covers explicit devkit trigger"
+else
+  fail "slash bridge explicit devkit trigger failed"
+fi
+
 unset_out=$(jq -n '{hook_event_name:"UserPromptSubmit",cwd:"/tmp",prompt:"/feature tiny no-op"}' | env -u DEVKIT_ROOT bash "$ROOT/hooks/codex-slash-commands.sh" 2>/dev/null || true)
 if [[ -z "$unset_out" ]]; then
   pass "slash bridge no-ops without DEVKIT_ROOT"
