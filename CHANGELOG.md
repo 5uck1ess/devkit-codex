@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.1
+## 1.0.0
 
 Initial public release of the Codex adapter for devkit.
 
@@ -37,3 +37,7 @@ Initial public release of the Codex adapter for devkit.
   write access; without it, the bump-commit push step will fail.
 - Release notes generation now tries both `## ${VERSION}` and `## v${VERSION}`
   headers in `CHANGELOG.md` (matching core devkit).
+- Release workflow no longer corrupts the version when no git tags exist.
+  Previously `git describe ... | sed ... || echo 0.0.0` ignored `git describe`'s
+  failure because the `||` saw `sed`'s success on empty input, leaving
+  `LATEST_TAG` empty and producing `version=..1` on the first release.
