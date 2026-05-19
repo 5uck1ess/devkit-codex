@@ -99,14 +99,14 @@ else
   fail "slash bridge emitted output without DEVKIT_ROOT"
 fi
 
-agent=$(cd "$DEVKIT_ROOT" && DEVKIT_ROOT="$DEVKIT_ROOT" bash "$ROOT/codex/agent-prompt.sh" researcher 2>/dev/null || true)
+agent=$(DEVKIT_ROOT="$DEVKIT_ROOT" bash "$ROOT/codex/agent-prompt.sh" researcher 2>/dev/null || true)
 if printf '%s' "$agent" | grep -q 'Recommended Codex subagent type: explorer'; then
   pass "agent mapper works"
 else
   fail "agent mapper failed"
 fi
 
-worker_agent=$(cd "$DEVKIT_ROOT" && DEVKIT_ROOT="$DEVKIT_ROOT" bash "$ROOT/codex/agent-prompt.sh" builder 2>/dev/null || true)
+worker_agent=$(DEVKIT_ROOT="$DEVKIT_ROOT" bash "$ROOT/codex/agent-prompt.sh" builder 2>/dev/null || true)
 if printf '%s' "$worker_agent" | grep -q 'Recommended Codex subagent type: worker'; then
   pass "agent mapper handles multiline tools"
 else
