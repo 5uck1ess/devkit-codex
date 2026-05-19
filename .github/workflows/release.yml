@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit_sha: ${{ steps.commit.outputs.commit_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          if ! printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "FATAL: manifest.json version must be semver x.y.z, got '$VERSION'"
+            exit 1
+          fi
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          echo "manifest=$VERSION latest_tag=$LATEST_TAG"
+
+          V_MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          V_MINOR=$(echo "$VERSION" | cut -d. -f2)
+          V_PATCH=$(echo "$VERSION" | cut -d. -f3)
+          T_MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1)
+          T_MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
+          T_PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
+
+          if [ "$V_MAJOR" -gt "$T_MAJOR" ] 2>/dev/null || \
+             ([ "$V_MAJOR" -eq "$T_MAJOR" ] && [ "$V_MINOR" -gt "$T_MINOR" ]) 2>/dev/null || \
+             ([ "$V_MAJOR" -eq "$T_MAJOR" ] && [ "$V_MINOR" -eq "$T_MINOR" ] && [ "$V_PATCH" -gt "$T_PATCH" ]) 2>/dev/null; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "FATAL: manifest.json version $VERSION must be ahead of latest tag $LATEST_TAG"
+            exit 1
+          fi
+
+      - name: Record release commit
+        id: commit
+        run: echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  create-release:
+    needs: version
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.create_release.outputs.release_created }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Generate release notes
+        id: notes
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          NOTES=$(awk "/^## ${VERSION}$/,/^## /{if(/^## ${VERSION}$/)next; if(/^## /)exit; print}" CHANGELOG.md 2>/dev/null)
+          if [ -z "$NOTES" ]; then
+            NOTES="Merged: ${PR_TITLE}"
+          fi
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        id: create_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          TAG="v${{ needs.version.outputs.version }}"
+          COMMIT="${{ needs.version.outputs.commit_sha }}"
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG already exists - skipping release"
+            echo "release_created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git tag "$TAG" "$COMMIT"
+          git push origin "$TAG"
+          if ! gh release create "$TAG" --title "$TAG" --draft --notes "$RELEASE_NOTES"; then
+            echo "::warning::Release creation failed - cleaning up orphaned tag"
+            git push origin --delete "$TAG" || true
+            echo "release_created=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "release_created=true" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: [version, create-release]
+    if: needs.create-release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.commit_sha }}
+
+      - name: Build source archive
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="devkit-codex-$VERSION/" \
+            -o "dist/devkit-codex-$VERSION.tar.gz" HEAD
+          (cd dist && sha256sum "devkit-codex-$VERSION.tar.gz" > checksums.txt)
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          gh release upload "v$VERSION" \
+            "dist/devkit-codex-$VERSION.tar.gz" \
+            dist/checksums.txt \
+            --clobber
+
+  publish:
+    needs: [version, create-release, package]
+    if: needs.create-release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "v${{ needs.version.outputs.version }}" --draft=false
+
+  cleanup-on-failure:
+    needs: [version, create-release, package, publish]
+    if: >-
+      always() &&
+      needs.create-release.outputs.release_created == 'true' &&
+      (needs.package.result == 'failure' || needs.package.result == 'cancelled' ||
+       needs.publish.result == 'failure' || needs.publish.result == 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete draft release on failure
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ needs.version.outputs.version }}"
+          echo "::warning::Cleaning up draft release $TAG due to workflow failure"
+          gh release delete "$TAG" --yes || echo "::warning::Failed to delete release $TAG - manual cleanup required"
+          git push origin --delete "$TAG" || echo "::warning::Failed to delete tag $TAG - manual cleanup required"

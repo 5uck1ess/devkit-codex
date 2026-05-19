@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq shellcheck
+
+      - name: Shell syntax
+        run: |
+          bash -n install.sh
+          bash -n test/hooks_test.sh
+          bash -n hooks/codex-hook.sh
+          bash -n hooks/codex-slash-commands.sh
+          bash -n hooks/codex-permission-guard.sh
+          bash -n codex/agent-prompt.sh
+
+      - name: Shellcheck
+        run: shellcheck install.sh test/hooks_test.sh hooks/*.sh codex/agent-prompt.sh
+
+      - name: JSON templates
+        run: |
+          jq . manifest.json >/dev/null
+          jq . codex/hooks.template.json >/dev/null
+
+      - name: Smoke tests
+        run: bash test/hooks_test.sh
+
+      - name: Executable scripts
+        run: |
+          for script in install.sh test/hooks_test.sh hooks/*.sh codex/agent-prompt.sh; do
+            test -x "$script" || {
+              echo "FATAL: $script is not executable"
+              exit 1
+            }
+          done
+
+      - name: Docs stay untracked
+        run: |
+          mkdir -p docs
+          touch docs/generated.md
+          if ! git check-ignore -q docs/generated.md; then
+            echo "FATAL: docs/generated.md is not ignored"
+            exit 1
+          fi
