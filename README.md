@@ -68,6 +68,25 @@ testing:
 ./install.sh --devkit ../devkit --config /tmp/codex-config.toml --hooks /tmp/codex-hooks.json
 ```
 
+## Update
+
+After pulling a newer devkit-codex checkout, rerun the installer so Codex picks
+up changed hook commands and MCP config:
+
+```sh
+cd devkit-codex
+git pull
+./install.sh --devkit "$(cd ../devkit && pwd)"
+./install.sh --health --devkit "$(cd ../devkit && pwd)"
+```
+
+Restart Codex after reinstalling. If hook commands changed, Codex will require
+review again:
+
+```text
+/hooks
+```
+
 ## Commands
 
 ```sh
