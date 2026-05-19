@@ -327,6 +327,7 @@ if ! {
   printf '\n[mcp_servers.devkit]\n'
   printf 'command = %s\n' "$(toml_quote "$devkit_root/bin/devkit")"
   printf 'args = ["mcp"]\n'
+  printf 'env = { CLAUDE_PLUGIN_ROOT = %s }\n' "$(toml_quote "$devkit_root")"
 } > "$config_tmp"; then
   rm -f "$tmp" "$config_tmp"
   exit 1

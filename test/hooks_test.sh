@@ -169,6 +169,11 @@ if grep -q '^hooks = true$' "$config_path"; then
 else
   fail "install missing hooks feature"
 fi
+if grep -q "^env = { CLAUDE_PLUGIN_ROOT = \"$fake_devkit\" }$" "$config_path"; then
+  pass "install sets devkit MCP CLAUDE_PLUGIN_ROOT"
+else
+  fail "install missing devkit MCP CLAUDE_PLUGIN_ROOT"
+fi
 
 health_out=$(bash "$ROOT/install.sh" --devkit "$fake_devkit" --config "$config_path" --hooks "$hooks_path" --health 2>&1)
 health_rc=$?
