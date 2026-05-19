@@ -14,10 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      commit_sha: ${{ steps.commit.outputs.commit_sha }}
+      commit_sha: ${{ steps.bump.outputs.commit_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ssh-key: ${{ secrets.VERSION_BUMP_KEY }}
           fetch-depth: 0
 
       - name: Determine version
@@ -31,25 +32,59 @@ jobs:
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
           echo "manifest=$VERSION latest_tag=$LATEST_TAG"
 
-          V_MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          V_MINOR=$(echo "$VERSION" | cut -d. -f2)
-          V_PATCH=$(echo "$VERSION" | cut -d. -f3)
-          T_MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1)
-          T_MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
-          T_PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
+          if [ "$VERSION" != "$LATEST_TAG" ]; then
+            V_MAJOR=$(echo "$VERSION" | cut -d. -f1)
+            V_MINOR=$(echo "$VERSION" | cut -d. -f2)
+            V_PATCH=$(echo "$VERSION" | cut -d. -f3)
+            T_MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1)
+            T_MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
+            T_PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
 
-          if [ "$V_MAJOR" -gt "$T_MAJOR" ] 2>/dev/null || \
-             ([ "$V_MAJOR" -eq "$T_MAJOR" ] && [ "$V_MINOR" -gt "$T_MINOR" ]) 2>/dev/null || \
-             ([ "$V_MAJOR" -eq "$T_MAJOR" ] && [ "$V_MINOR" -eq "$T_MINOR" ] && [ "$V_PATCH" -gt "$T_PATCH" ]) 2>/dev/null; then
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            if [ "$V_MAJOR" -gt "$T_MAJOR" ] 2>/dev/null || \
+               ([ "$V_MAJOR" -eq "$T_MAJOR" ] && [ "$V_MINOR" -gt "$T_MINOR" ]) 2>/dev/null || \
+               ([ "$V_MAJOR" -eq "$T_MAJOR" ] && [ "$V_MINOR" -eq "$T_MINOR" ] && [ "$V_PATCH" -gt "$T_PATCH" ]) 2>/dev/null; then
+              echo "Manual version bump detected: $LATEST_TAG -> $VERSION"
+              echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+              echo "bumped=manual" >> "$GITHUB_OUTPUT"
+            else
+              echo "manifest.json version $VERSION is not ahead of tag $LATEST_TAG - auto-bumping patch"
+              echo "bumped=auto" >> "$GITHUB_OUTPUT"
+            fi
           else
-            echo "FATAL: manifest.json version $VERSION must be ahead of latest tag $LATEST_TAG"
-            exit 1
+            echo "No manual bump - auto-bumping patch"
+            echo "bumped=auto" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Record release commit
-        id: commit
-        run: echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if ! grep -q "^version=" "$GITHUB_OUTPUT" 2>/dev/null; then
+            MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1)
+            MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
+            PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+            echo "Auto-bumping: $LATEST_TAG -> $NEW_VERSION"
+            echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync version files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          jq --arg v "$VERSION" '.version = $v' manifest.json > manifest.json.tmp
+          mv manifest.json.tmp manifest.json
+
+      - name: Commit version bump
+        id: bump
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "manifest.json already at $VERSION - no bump commit needed"
+          else
+            git commit -m "bump to v${VERSION}"
+            git push
+          fi
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   create-release:
     needs: version
@@ -69,6 +104,9 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           NOTES=$(awk "/^## ${VERSION}$/,/^## /{if(/^## ${VERSION}$/)next; if(/^## /)exit; print}" CHANGELOG.md 2>/dev/null)
+          if [ -z "$NOTES" ]; then
+            NOTES=$(awk "/^## v${VERSION}$/,/^## /{if(/^## v${VERSION}$/)next; if(/^## /)exit; print}" CHANGELOG.md 2>/dev/null)
+          fi
           if [ -z "$NOTES" ]; then
             NOTES="Merged: ${PR_TITLE}"
           fi

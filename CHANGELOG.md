@@ -31,3 +31,9 @@ Initial public release of the Codex adapter for devkit.
 - Smoke tests now cover skill dispatch, natural-language dispatch, apply-patch
   rewriting, Stop block rewriting, permission-deny behavior, and multiline
   agent tools.
+- Release workflow now auto-bumps the patch version (matching core devkit)
+  instead of failing when `manifest.json` is not ahead of the latest tag.
+  Requires `secrets.VERSION_BUMP_KEY` to be configured as a deploy key with
+  write access; without it, the bump-commit push step will fail.
+- Release notes generation now tries both `## ${VERSION}` and `## v${VERSION}`
+  headers in `CHANGELOG.md` (matching core devkit).
